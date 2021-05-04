@@ -15,7 +15,7 @@ test_name = "simple_cnn_test"
 netid = "cl5592"
 # Hyper-parameters 
 num_epochs = 5 #6
-batch_size = 4 #128
+batch_size = 128 #128
 learning_rate = 0.001
 
 # Global-variables for storing CSV
@@ -130,7 +130,8 @@ with torch.no_grad():
         n_samples += labels.size(0)
         n_correct += (predicted == labels).sum().item()
         
-        for i in range(batch_size):
+        # for i in range(batch_size):
+        for i in range(len(labels))
             label = labels[i]
             pred = predicted[i]
             if (label == pred):
