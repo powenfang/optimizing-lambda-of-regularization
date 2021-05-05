@@ -6,7 +6,7 @@ import torchvision.transforms as transforms
 import numpy as np
 
 # Device configuration
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+#device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def get_train_acc(outputs, labels):
     _, predicted = torch.max(outputs, 1)
@@ -26,7 +26,8 @@ def L2_penalty(params, Lambda_L2):
     L2_norm = sum(p.pow(2.0).sum() for p in params)
     return Lambda_L2 * L2_norm
 
-def get_test_result(model, test_loader, Lambda_L2):
+def get_test_result(model, test_loader, Lambda_L2, device):
+    
     test_bareloss, test_loss = 0, 0
     model.eval()
     with torch.no_grad():
