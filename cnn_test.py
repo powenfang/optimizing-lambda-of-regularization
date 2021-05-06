@@ -21,7 +21,7 @@ if device.type == 'cuda':
     print('Cached:   ', round(torch.cuda.memory_reserved(0)/1024**3,1), 'GB')
 
 test_name = "cnn_test_autoL2_6epochs"
-netid = "pwf227"
+netid = "cl5592"
 # Hyper-parameters 
 num_epochs = 6 #6
 batch_size = 128 #128
