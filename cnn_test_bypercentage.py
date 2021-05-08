@@ -20,8 +20,8 @@ if device.type == 'cuda':
     print('Allocated:', round(torch.cuda.memory_allocated(0)/1024**3,1), 'GB')
     print('Cached:   ', round(torch.cuda.memory_reserved(0)/1024**3,1), 'GB')
 
-test_name = "cnn_test_autoL2_epochs"
-netid = "pwf227"
+test_name = "cnn_autoL2_by5pctg_200epochs"
+netid = "cl5592"
 # Hyper-parameters 
 num_epochs = 200 #6
 batch_size = 128 #128
@@ -43,6 +43,9 @@ if use_AutoL2:
 else:
     Lambda_L2 = 0.0001
 
+# if min_loss or accuracy increase by this percentage
+# then update L2 lambda
+increase_percentage = 5
 
 
 
@@ -139,8 +142,8 @@ for epoch in range(num_epochs):
             if use_AutoL2:
 
                 if len(train_bareloss) > 2 \
-                    and loss_or_error_increase(train_bareloss[-1], train_acc[-1], min_loss, max_acc) \
-                    and loss_or_error_increase(train_bareloss[-2], train_acc[-2], min_loss, max_acc) \
+                    and loss_or_error_increase_by_percentage(train_bareloss[-1], train_acc[-1], min_loss, max_acc, increase_percentage) \
+                    and loss_or_error_increase_by_percentage(train_bareloss[-2], train_acc[-2], min_loss, max_acc, increase_percentage) \
                     and i > min_step:
                     
                     Lambda_L2 = Lambda_L2 * decay_factor_L2
@@ -185,7 +188,7 @@ record_df['learning_rate'] = learning_rate
 
 
 import os.path
-fpath = PATH + 'record.csv'
+fpath = PATH + 'cnn_autoL2_by5pctg_200epochs.csv'
 header_flag = False if (os.path.exists(fpath) and (os.path.getsize(fpath) > 0)) else True
 
 # write to csv

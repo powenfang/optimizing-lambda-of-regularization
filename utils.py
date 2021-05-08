@@ -22,6 +22,15 @@ def loss_or_error_increase(loss, acc, min_loss, max_acc):
         return True
     return False
 
+# when loss or accuracy increase by pctg %
+def loss_or_error_increase_by_percentage(loss, acc, min_loss, max_acc, pct):
+    if loss >= min_loss * (1 + pct/100):
+        return True
+    if acc * (1 + pct/100) <= max_acc:
+        return True
+    return False
+
+
 def L2_penalty(params, Lambda_L2):
     L2_norm = sum(p.pow(2.0).sum() for p in params)
     return Lambda_L2 * L2_norm

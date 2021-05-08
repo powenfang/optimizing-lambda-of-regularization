@@ -20,13 +20,13 @@ if device.type == 'cuda':
     print('Allocated:', round(torch.cuda.memory_allocated(0)/1024**3,1), 'GB')
     print('Cached:   ', round(torch.cuda.memory_reserved(0)/1024**3,1), 'GB')
 
-test_name = "cnn_test_autoL2_epochs"
-netid = "pwf227"
+test_name = "cnn_autoL2_by5pctg_bn_200epochs"
+netid = "cl5592"
 # Hyper-parameters 
 num_epochs = 200 #6
 batch_size = 128 #128
 learning_rate = 0.01
-batch_norm = False
+batch_norm = True
 
 Lambda_L2s = []
 epochs, steps = [], []
@@ -43,6 +43,9 @@ if use_AutoL2:
 else:
     Lambda_L2 = 0.0001
 
+# if min_loss or accuracy increase by this percentage
+# then update L2 lambda
+increase_percentage = 5
 
 
 
@@ -74,26 +77,28 @@ def initialize_weights(m):
         nn.init.normal_(m.weight, mean=0.0, std= np.sqrt(2/fan_in))
 
 
-class ConvNet(nn.Module):
+class ConvNetBN(nn.Module):
     def __init__(self):
-        super(ConvNet, self).__init__()
+        super(ConvNetBN, self).__init__()
         self.conv1 = nn.Conv2d(3, 300, 3)
+        self.bn1 = nn.BatchNorm2d(300)
         self.pool = nn.MaxPool2d(2, 2)
         self.conv2 = nn.Conv2d(300, 300, 3)
+        self.bn2 = nn.BatchNorm2d(300)
         self.fc1 = nn.Linear(300 * 6 * 6, 500)
         self.fc2 = nn.Linear(500, 10)
 
     def forward(self, x):
         # -> n, 3, 32, 32
-        x = self.pool(F.relu(self.conv1(x)))  # -> n, 300, 15, 15
-        x = self.pool(F.relu(self.conv2(x)))  # -> n, 300, 6, 6
+        x = self.pool(F.relu(self.bn1(self.conv1(x))))  # -> n, 300, 15, 15
+        x = self.pool(F.relu(self.bn2(self.conv2(x))))  # -> n, 300, 6, 6
         x = x.view(-1, 300 * 6 * 6)            # -> n, 300*6*6
         x = F.relu(self.fc1(x))               # -> n, 500
         x = self.fc2(x)                       # -> n, 10
         return x
 
 
-model = ConvNet().to(device)
+model = ConvNetBN().to(device)
 model.apply(initialize_weights)
 
 #criterion = nn.CrossEntropyLoss()
@@ -139,8 +144,8 @@ for epoch in range(num_epochs):
             if use_AutoL2:
 
                 if len(train_bareloss) > 2 \
-                    and loss_or_error_increase(train_bareloss[-1], train_acc[-1], min_loss, max_acc) \
-                    and loss_or_error_increase(train_bareloss[-2], train_acc[-2], min_loss, max_acc) \
+                    and loss_or_error_increase_by_percentage(train_bareloss[-1], train_acc[-1], min_loss, max_acc, increase_percentage) \
+                    and loss_or_error_increase_by_percentage(train_bareloss[-2], train_acc[-2], min_loss, max_acc, increase_percentage) \
                     and i > min_step:
                     
                     Lambda_L2 = Lambda_L2 * decay_factor_L2
@@ -185,7 +190,7 @@ record_df['learning_rate'] = learning_rate
 
 
 import os.path
-fpath = PATH + 'record.csv'
+fpath = PATH + 'cnn_autoL2_by5pctg_bn_200epochs.csv'
 header_flag = False if (os.path.exists(fpath) and (os.path.getsize(fpath) > 0)) else True
 
 # write to csv
