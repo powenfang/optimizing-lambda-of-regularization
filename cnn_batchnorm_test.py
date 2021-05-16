@@ -9,21 +9,10 @@ import csv
 
 from utils import *
 
-# Device configuration
-device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-print('Using device:', device)
-print()
-#Additional Info when using cuda
-if device.type == 'cuda':
-    print(torch.cuda.get_device_name(0))
-    print('Memory Usage:')
-    print('Allocated:', round(torch.cuda.memory_allocated(0)/1024**3,1), 'GB')
-    print('Cached:   ', round(torch.cuda.memory_reserved(0)/1024**3,1), 'GB')
-
-test_name = "cnn_batchnorm_test_L2_1e-04_200epochs"
+test_name = "cnn_bn_L2_5e-2_30epochs"
 netid = "pwf227"
 # Hyper-parameters 
-num_epochs = 200 #6
+num_epochs = 30 #6
 batch_size = 128 #128
 learning_rate = 0.01
 batch_norm = True
@@ -41,8 +30,30 @@ decay_factor_L2 = 0.1
 if use_AutoL2:
     Lambda_L2 = 0.1
 else:
-    Lambda_L2 = 0.0001
+    Lambda_L2 = 0.05
 
+
+
+print(test_name)
+print(netid)
+print('num_epochs:', num_epochs)
+print('batch_size:', batch_size)
+print('learning_rate:', learning_rate)
+print('batch_norm:', batch_norm)
+print('use_AutoL2:', use_AutoL2)
+print('Lambda_L2:', Lambda_L2)
+print('decay_factor_L2:', decay_factor_L2)
+
+
+# Device configuration
+device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+print('Using device:', device)
+#Additional Info when using cuda
+if device.type == 'cuda':
+    print(torch.cuda.get_device_name(0))
+    print('Memory Usage:')
+    print('Allocated:', round(torch.cuda.memory_allocated(0)/1024**3,1), 'GB')
+    print('Cached:   ', round(torch.cuda.memory_reserved(0)/1024**3,1), 'GB')
 
 
 
@@ -187,7 +198,7 @@ record_df['learning_rate'] = learning_rate
 
 
 import os.path
-fpath = PATH + 'record.csv'
+fpath = PATH + test_name + '_record.csv'
 header_flag = False if (os.path.exists(fpath) and (os.path.getsize(fpath) > 0)) else True
 
 # write to csv
