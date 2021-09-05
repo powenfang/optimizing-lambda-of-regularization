@@ -6,8 +6,58 @@ import torchvision.transforms as transforms
 import numpy as np
 import pandas as pd
 import csv
+import argparse
+import datetime
 
 from utils import *
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--netid", help = "specify netid to get access to GCP")
+parser.add_argument("--e", "--epochs", help = "number of epochs", type = int, default = 200)
+parser.add_argument("--b", "--batch_size", help = "specify the batch size", type = int, default = 128)
+parser.add_argument("--lr", "--learning_rate", help = "specify the learning rate", type = float, required = True)
+parser.add_argument("--bn", "--batch_norm", help = "use batch normalization", action = 'store_true')
+parser.add_argument("--l2", help = "initial coefficient of L2. If using decay method, recommend 0.1", type = float, required = True)
+parser.add_argument("--auto_l2", help = "use Auto L2 or not", action = 'store_true')
+parser.add_argument("--adv_l2", help = "use Advance L2 or not", action = 'store_true')
+
+parser.add_argument("--p", "--pctg", help = "threshold of delta to change L2", type = int)
+
+args = parser.parse_args()
+
+netid = args.netid
+
+num_epochs = args.epochs
+batch_size = args.batch_size
+learning_rate = args.learning_rate
+Lambda_L2 = args.l2
+# if min_loss or accuracy increase by this percentage
+# then update L2 lambda
+increase_percentage = args.pctg
+
+k = 5 # make measurements every k steps
+min_step = 0
+decay_factor_L2 = 0.1
+
+Lambda_L2s = []
+epochs, steps = [], []
+train_bareloss, train_loss, train_acc = [], [], []
+test_bareloss, test_loss, test_acc = [], [], []
+
+ts = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+test_name = form_test_name(args.batch_norm, args.auto_l2, args.adv_l2, ts)
+
+print(test_name)
+print(netid)
+print('num_epochs:', num_epochs)
+print('batch_size:', batch_size)
+print('learning_rate:', learning_rate)
+print('batch_norm:', args.batch_norm)
+print('use_AutoL2:', args.auto_l2)
+print('use_AdvL2:', args.adv_l2)
+print('Lambda_L2:', Lambda_L2)
+print('decay_factor_L2:', decay_factor_L2)
+print('threshold_percentage:', increase_percentage)
 
 # Device configuration
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -19,31 +69,6 @@ if device.type == 'cuda':
     print('Memory Usage:')
     print('Allocated:', round(torch.cuda.memory_allocated(0)/1024**3,1), 'GB')
     print('Cached:   ', round(torch.cuda.memory_reserved(0)/1024**3,1), 'GB')
-
-test_name = "cnn_test_autoL2_epochs"
-netid = "pwf227"
-# Hyper-parameters 
-num_epochs = 200 #6
-batch_size = 128 #128
-learning_rate = 0.01
-batch_norm = False
-
-Lambda_L2s = []
-epochs, steps = [], []
-train_bareloss, train_loss, train_acc = [], [], []
-test_bareloss, test_loss, test_acc = [], [], []
-
-use_AutoL2 = True
-k = 5 # make measurements every k steps
-min_step = 0
-decay_factor_L2 = 0.1
-
-if use_AutoL2:
-    Lambda_L2 = 0.1
-else:
-    Lambda_L2 = 0.0001
-
-
 
 
 
@@ -92,8 +117,32 @@ class ConvNet(nn.Module):
         x = self.fc2(x)                       # -> n, 10
         return x
 
+class ConvNetBN(nn.Module):
+    def __init__(self):
+        super(ConvNetBN, self).__init__()
+        self.conv1 = nn.Conv2d(3, 300, 3)
+        self.bn1 = nn.BatchNorm2d(300)
+        self.pool = nn.MaxPool2d(2, 2)
+        self.conv2 = nn.Conv2d(300, 300, 3)
+        self.bn2 = nn.BatchNorm2d(300)
+        self.fc1 = nn.Linear(300 * 6 * 6, 500)
+        self.fc2 = nn.Linear(500, 10)
 
-model = ConvNet().to(device)
+    def forward(self, x):
+        # -> n, 3, 32, 32
+        x = self.pool(F.relu(self.bn1(self.conv1(x))))  # -> n, 300, 15, 15
+        x = self.pool(F.relu(self.bn2(self.conv2(x))))  # -> n, 300, 6, 6
+        x = x.view(-1, 300 * 6 * 6)            # -> n, 300*6*6
+        x = F.relu(self.fc1(x))               # -> n, 500
+        x = self.fc2(x)                       # -> n, 10
+        return x
+
+
+if args.batch_norm:
+    model = ConvNetBN().to(device)
+else:
+    model = ConvNet().to(device)
+
 model.apply(initialize_weights)
 
 #criterion = nn.CrossEntropyLoss()
@@ -136,8 +185,7 @@ for epoch in range(num_epochs):
 
             Lambda_L2s.append(Lambda_L2)
 
-            if use_AutoL2:
-
+            if args.auto_l2:
                 if len(train_bareloss) > 2 \
                     and loss_or_error_increase(train_bareloss[-1], train_acc[-1], min_loss, max_acc) \
                     and loss_or_error_increase(train_bareloss[-2], train_acc[-2], min_loss, max_acc) \
@@ -145,6 +193,27 @@ for epoch in range(num_epochs):
                     
                     Lambda_L2 = Lambda_L2 * decay_factor_L2
                     min_step = 0.1/Lambda_L2 + i   # why 0.1?
+
+                elif len(train_bareloss) >= 2:
+                    try:
+                        min_loss, max_acc = min(train_bareloss[-2], min_loss), max(train_acc[-2], max_acc)
+                    except NameError:
+                        min_loss, max_acc = train_bareloss[-2], train_acc[-2]
+
+            elif args.adv_l2:
+                if len(train_bareloss) > 2 and i > min_step:
+                    if loss_or_error_increase_by_percentage(train_bareloss[-1], train_acc[-1], min_loss, max_acc, increase_percentage) \
+                        and loss_or_error_increase_by_percentage(train_bareloss[-2], train_acc[-2], min_loss, max_acc, increase_percentage):
+
+                        Lambda_L2 = Lambda_L2 * decay_factor_L2
+                        min_step = 0.1/Lambda_L2 + i   # why 0.1?
+
+                    elif loss_or_error_increase_by_percentage(min_loss, max_acc, train_bareloss[-1], train_acc[-1], increase_percentage) \
+                        and loss_or_error_increase_by_percentage(min_loss, max_acc, train_bareloss[-2], train_acc[-2], increase_percentage):
+
+                        Lambda_L2 = Lambda_L2 / decay_factor_L2
+                        min_step = 0.1/Lambda_L2 + i   # why 0.1?
+                        min_loss, max_acc = train_bareloss[-2], train_acc[-2]
 
                 elif len(train_bareloss) >= 2:
                     try:
@@ -180,13 +249,14 @@ record_df = pd.DataFrame(record)
 record_df['id'] = test_name
 record_df['num_epochs'] = num_epochs
 record_df['batch_size'] = batch_size
-record_df['batch_norm'] = batch_norm
+record_df['batch_norm'] = args.batch_norm
 record_df['learning_rate'] = learning_rate
+record_df['threshold_percentage'] = increase_percentage
 
 
 import os.path
-fpath = PATH + 'record.csv'
+fpath = PATH + test_name + '.csv'
 header_flag = False if (os.path.exists(fpath) and (os.path.getsize(fpath) > 0)) else True
 
 # write to csv
-record_df.to_csv(fpath, mode = 'a', header = header_flag, index = False)
+record_df.to_csv(fpath, header = header_flag, index = False)

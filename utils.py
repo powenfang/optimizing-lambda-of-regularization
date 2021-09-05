@@ -5,8 +5,22 @@ import torchvision
 import torchvision.transforms as transforms
 import numpy as np
 
-# Device configuration
-#device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+def form_test_name(batch_norm, auto_l2, adv_l2, ts):
+    if batch_norm:
+        if auto_l2:
+            test_name = '_'.join(['bn', 'autol2', ts])
+        elif adv_l2:
+            test_name = '_'.join(['bn', 'advl2', ts])
+        else:
+            test_name = '_'.join(['bn', 'l2', ts])
+    else:
+        if auto_l2:
+            test_name = '_'.join(['autol2', ts])
+        elif adv_l2:
+            test_name = '_'.join(['advl2', ts])
+        else:
+            test_name = '_'.join(['l2', ts])
+    return test_name
 
 def get_train_acc(outputs, labels):
     _, predicted = torch.max(outputs, 1)
